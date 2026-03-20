@@ -1,1 +1,11 @@
 __pycache__/
+10k_data/
+dataset/__pycache__/
+images/
+IP102_v1.1-20260304T221750Z-3-002/
+models/__pycache__/
+utils/__pycache__/
+checkpoint/
+checkpoint_10k/
+dataset_10k/
+*.pth

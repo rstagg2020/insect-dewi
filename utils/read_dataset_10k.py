@@ -1,11 +1,10 @@
 import torch
-from dataset import pre_data
-
+from dataset import pre_data_10k as pre_data
 
 def read_dataset(input_size, batch_size, root, dataset_path):
     trainset = pre_data.Dataset(input_size=input_size, root=root, dataset_path=dataset_path, mode='train')
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
-                                                shuffle=True, num_workers=0, drop_last=False)
+                                                shuffle=True, num_workers=0, drop_last=True)
 
     valset = pre_data.Dataset(input_size=input_size, root=root, dataset_path=dataset_path, mode='val')
     valloader = torch.utils.data.DataLoader(valset, batch_size=batch_size,

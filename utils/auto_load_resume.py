@@ -15,7 +15,7 @@ def auto_load_resume(model, optimizer, scheduler, path, status, device):
             best_model = torch.load(best_model_path, map_location=device)
             new_state_dict = OrderedDict()
             for k, v in checkpoint['model_state_dict'].items():
-                name = k[:]        #  = k[7:] if you used DataParallel
+                name = k[7:] if k.startswith('module.') else k
                 new_state_dict[name] = v
             model.load_state_dict(new_state_dict)
             model = model.to(device)
@@ -29,7 +29,7 @@ def auto_load_resume(model, optimizer, scheduler, path, status, device):
         checkpoint = torch.load(path, map_location='cpu')
         new_state_dict = OrderedDict()
         for k, v in checkpoint['model_state_dict'].items():
-            name = k[:]        #  = k[7:] if you used DataParallel
+            name = k[7:] if k.startswith('module.') else k
             new_state_dict[name] = v
         model.load_state_dict(new_state_dict)
         epoch = checkpoint['epoch']

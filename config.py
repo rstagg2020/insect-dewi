@@ -7,6 +7,6 @@ lr_decay_rate = 0.1
 weight_decay = 1e-4
 input_size = 384
     
-root = '/home/DeWi'   # the root folder, which contains all the files
-checkpoint_path = '/home/DeWi/checkpoint/'      # path of the checkpoint
-dataset_path = '/home/DeWi/ip102_v1.1/images'    # the path of **images** folder
+root = '/mnt/data_sda/rstagg/git_repos/insects/DeWi'   # the root folder, which contains all the files
+checkpoint_path = '/mnt/data_sda/rstagg/git_repos/insects/DeWi/checkpoint/'      # path of the checkpoint
+dataset_path = '/mnt/data_sda/rstagg/git_repos/insects/DeWi/images'    # the path of **images** folder
