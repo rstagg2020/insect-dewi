@@ -4,6 +4,7 @@ from tqdm import tqdm
 from utils.eval_model import eval
 from torch.autograd import Variable
 from utils.mixup_utils import mixup_data, mixup_criterion
+import wandb
 
 
 def train(model,
@@ -28,6 +29,7 @@ def train(model,
 
         lr = next(iter(optimizer.param_groups))['lr']
         turn = True
+        epoch_train_loss = 0.0
         for _, data in enumerate(tqdm(trainloader)):
             images, labels = data
             images, labels = images.to(device), labels.to(device)
@@ -49,6 +51,7 @@ def train(model,
 
             total_loss.backward()
             optimizer.step()
+            epoch_train_loss += total_loss.item()
             
         scheduler.step()
         
@@ -62,6 +65,23 @@ def train(model,
         print('Test set: Avg Test CE Loss: {:.4f}; Avg Test Metric Loss: {:.4f}; Test accuracy: {:.2f}%'.format(test_loss_avg, test_metric_loss_avg, 100. * test_accuracy))
         f.write('Test set: Avg Test CE Loss: {:.4f}; Avg Test Metric Loss: {:.4f}; Test accuracy: {:.2f}%'.format(test_loss_avg, test_metric_loss_avg, 100. * test_accuracy))
         
+        avg_train_loss = epoch_train_loss / len(trainloader)
+        
+        try:
+            wandb.log({
+                "epoch": epoch,
+                "learning_rate": lr,
+                "train_loss": avg_train_loss,
+                "val_ce_loss": val_loss_avg,
+                "val_metric_loss": val_metric_loss_avg,
+                "val_accuracy": val_accuracy,
+                "test_ce_loss": test_loss_avg,
+                "test_metric_loss": test_metric_loss_avg,
+                "test_accuracy": test_accuracy
+            })
+        except Exception:
+            pass
+        
         # save checkpoint
         print('Saving checkpoint')
         torch.save({
@@ -72,7 +92,12 @@ def train(model,
             'learning_rate': lr,
             'val_acc': val_accuracy,
             'test_acc': test_accuracy
-        }, os.path.join(save_path, 'current_model' + '.pth'))
+        }, os.path.join(save_path, 'current_model.pth'))
+
+        try:
+            wandb.save(os.path.join(save_path, 'current_model.pth'), base_path=save_path, policy="now")
+        except Exception:
+            pass
 
         if val_accuracy > best_acc:
             print('Saving best model')
@@ -84,5 +109,11 @@ def train(model,
                 'learning_rate': lr,
                 'val_acc': val_accuracy,
                 'test_acc': test_accuracy
-            }, os.path.join(save_path, 'best_model' + '.pth'))
+            }, os.path.join(save_path, 'best_model.pth'))
+            
+            try:
+                wandb.save(os.path.join(save_path, 'best_model.pth'), base_path=save_path, policy="now")
+            except Exception:
+                pass
+
         f.close()

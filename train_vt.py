@@ -8,13 +8,14 @@ from torch.optim.lr_scheduler import MultiStepLR
 import shutil
 import time
 from utils.set_seeds import seed_everything
-from utils.read_dataset_10k import read_dataset
+from utils.read_dataset_vt import read_dataset
 from utils.train_model import train
 from config import seed, batch_size, root, checkpoint_path, init_lr, lr_decay_rate,\
     lr_milestones, weight_decay, end_epoch, dataset_path, input_size
 from utils.auto_load_resume import auto_load_resume
 import os
 import argparse
+import wandb
 from pytorch_metric_learning import losses, miners
 
 from models.dewi import dewi_resnet50, dewi_resnet101, dewi_resnet152, dewi_resnext50_32x4d, dewi_resnext101_32x8d, dewi_resnext101_64x4d,\
@@ -49,17 +50,17 @@ pretrained_url_pool.update(dict.fromkeys(['dewi_wide_resnet101_2'], "https://dow
 
 def main():
     # count num classes
-    classes_file = open(os.path.join(root, 'dataset_10k', 'classes.txt'))
+    classes_file = open(os.path.join(root, 'dataset_vt', 'classes.txt'))
     num_classes = len(classes_file.readlines())
     classes_file.close()
     
     # set all the necessary seeds
     seed_everything(seed)
     
-    dataset_path_10k = os.path.join(root, "10k_data", "10KDataVT2014-2022")
-    end_epoch = 10 # 1 epoch already ran, so this will run 10 more
+    dataset_path_vt = os.path.join(root, "vt_data", "10KDataVT2014-2022")
+    end_epoch = 30 # Increased to train longer after plateau
     # Read the dataset
-    trainloader, valloader, testloader = read_dataset(input_size, batch_size, root, dataset_path_10k)
+    trainloader, valloader, testloader = read_dataset(input_size, batch_size, root, dataset_path_vt)
 
     # Initialize the model (it defaults to 102 classes in dewi.py)
     model = model_pool.get(args["model"])(pth_url=pretrained_url_pool.get(args["model"]), pretrained=True)
@@ -94,9 +95,16 @@ def main():
     scheduler = MultiStepLR(optimizer, milestones=lr_milestones, gamma=lr_decay_rate, verbose=True)
 
     # loading checkpoint
-    save_path = os.path.join(checkpoint_path, args["model"] + "_10k")
+    save_path = os.path.join(checkpoint_path, args["model"] + "_vt")
     if os.path.exists(save_path):
         start_epoch, best_val_acc = auto_load_resume(model, optimizer, scheduler, save_path, status='train', device=device)
+        
+        # User requested to change learning rate due to plateau
+        new_lr = 0.0003
+        print(f"Lowering learning rate to {new_lr} to handle plateau...")
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = new_lr
+
         assert start_epoch < end_epoch
     else:
         os.makedirs(save_path)
@@ -111,6 +119,15 @@ def main():
 
     time_str = time.strftime("%Y%m%d-%H%M%S")
     shutil.copy('./config.py', os.path.join(save_path, "{}config.py".format(time_str)))
+    
+    # Initialize wandb
+    wandb.init(project="dewi-insect-classification", name="vt-100k-finetuning", config={
+        "model": args["model"],
+        "batch_size": batch_size,
+        "init_lr": init_lr,
+        "end_epoch": end_epoch
+    })
+
      # Train the model
     train(model=model,
           device=device,

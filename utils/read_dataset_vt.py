@@ -1,5 +1,5 @@
 import torch
-from dataset import pre_data_10k as pre_data
+from dataset_vt import pre_data_vt as pre_data
 
 def read_dataset(input_size, batch_size, root, dataset_path):
     trainset = pre_data.Dataset(input_size=input_size, root=root, dataset_path=dataset_path, mode='train')

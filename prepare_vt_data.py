@@ -1,8 +1,8 @@
 import os
 import random
 
-root_dir = '/mnt/data_sda/rstagg/git_repos/insects/DeWi/10k_data/10KDataVT2014-2022'
-out_dir = '/mnt/data_sda/rstagg/git_repos/insects/DeWi/dataset_10k'
+root_dir = '/mnt/data_sda/rstagg/git_repos/insects/DeWi/vt_data/10KDataVT2014-2022'
+out_dir = '/mnt/data_sda/rstagg/git_repos/insects/DeWi/dataset_vt'
 
 if not os.path.exists(out_dir):
     os.makedirs(out_dir)
