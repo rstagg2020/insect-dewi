@@ -20,8 +20,11 @@ def auto_load_resume(model, optimizer, scheduler, path, status, device):
             model.load_state_dict(new_state_dict)
             model = model.to(device)
             epoch = checkpoint['epoch']
-            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+            try:
+                optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+            except ValueError as e:
+                print(f"Warning: Could not load optimizer/scheduler state dicts ({e}). Starting fresh optimizer state.")
             print('Resume from %s' % 'epoch' + str(epoch))
             return epoch, best_model['val_acc']
     elif status == 'test':

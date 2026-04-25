@@ -87,10 +87,17 @@ def main():
 
     metric_loss = losses.TripletMarginLoss(0.2)
     miner = miners.BatchHardMiner()
-    parameters = model.parameters()
+    
+    # Differential learning rates:
+    # Separate the FC layer parameters from the rest of the model (the backbone)
+    fc_params = list(map(id, model.fc.parameters()))
+    base_params = filter(lambda p: id(p) not in fc_params, model.parameters())
 
-    # define the optimizer
-    optimizer = torch.optim.SGD(parameters, lr=init_lr, momentum=0.9, weight_decay=weight_decay)
+    # define the optimizer with differential learning rates
+    optimizer = torch.optim.SGD([
+        {'params': base_params, 'lr': init_lr * 0.1},  # Backbone gets a 10x smaller LR
+        {'params': model.fc.parameters(), 'lr': init_lr} # New classification head gets standard LR
+    ], momentum=0.9, weight_decay=weight_decay)
     # define the learning rate scheduler
     scheduler = MultiStepLR(optimizer, milestones=lr_milestones, gamma=lr_decay_rate, verbose=True)
 
