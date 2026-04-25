@@ -9,7 +9,6 @@ utils/__pycache__/
 checkpoint/
 checkpoint_10k/
 dataset_10k/
-dataset_vt/
 *.pth
 my_folders.zip
 wandb/
