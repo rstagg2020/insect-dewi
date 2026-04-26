@@ -4,6 +4,8 @@ warnings.filterwarnings('ignore')
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import math
 from torch.optim.lr_scheduler import MultiStepLR
 import shutil
 import time
@@ -20,6 +22,24 @@ from pytorch_metric_learning import losses, miners
 
 from models.dewi import dewi_resnet50, dewi_resnet101, dewi_resnet152, dewi_resnext50_32x4d, dewi_resnext101_32x8d, dewi_resnext101_64x4d,\
     dewi_wide_resnet50_2, dewi_wide_resnet101_2
+
+class CosineClassifier(nn.Module):
+    def __init__(self, in_features, num_classes, init_scale=20.0):
+        super(CosineClassifier, self).__init__()
+        self.in_features = in_features
+        self.num_classes = num_classes
+        # Make the scale 's' a learnable parameter to dynamically soften/harden the distribution
+        self.scale = nn.Parameter(torch.tensor([init_scale]))
+        self.weight = nn.Parameter(torch.Tensor(num_classes, in_features))
+        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+
+    def forward(self, x):
+        # L2-normalize both features and weights
+        x = F.normalize(x, p=2, dim=1)
+        w = F.normalize(self.weight, p=2, dim=1)
+        # Cosine similarity scaled by a constant factor
+        return F.linear(x, w) * self.scale
+
 
 device = torch.device("cuda")
 
@@ -67,10 +87,8 @@ def main():
     
     # Modify the classification head for the new number of classes
     in_features = model.fc.in_features
-    # Replace the FC layer with a new one matching out classes
-    model.fc = nn.Linear(in_features, num_classes)
-    nn.init.kaiming_normal_(model.fc.weight, mode='fan_out', nonlinearity='relu')
-    nn.init.constant_(model.fc.bias, 0)
+    # Replace the FC layer with a new one matching out classes (Logit Normalization)
+    model.fc = CosineClassifier(in_features, num_classes, init_scale=20.0)
     
     # load pretrained IP102 checkpoint if it exists so we are fine-tuning from IP102.
     pretrained_ip102_path = os.path.join(checkpoint_path, args["model"], "best_model.pth")
@@ -83,7 +101,7 @@ def main():
         model.load_state_dict(state_dict, strict=False)
 
     # define the CE loss function
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
     metric_loss = losses.TripletMarginLoss(0.2)
     miner = miners.BatchHardMiner()
@@ -109,8 +127,13 @@ def main():
         # User requested to change learning rate due to plateau
         new_lr = 0.0003
         print(f"Lowering learning rate to {new_lr} to handle plateau...")
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = new_lr
+        
+        # Fix: Maintain the 10x differential learning rate ratio between backbone and head
+        optimizer.param_groups[0]['lr'] = new_lr * 0.1  # Backbone
+        optimizer.param_groups[1]['lr'] = new_lr        # Classification Head
+        
+        # Reset optimizer state (momentum buffers) to prevent immediate divergence
+        optimizer.state.clear()
 
         assert start_epoch < end_epoch
     else:

@@ -17,7 +17,7 @@ def auto_load_resume(model, optimizer, scheduler, path, status, device):
             for k, v in checkpoint['model_state_dict'].items():
                 name = k[7:] if k.startswith('module.') else k
                 new_state_dict[name] = v
-            model.load_state_dict(new_state_dict)
+            model.load_state_dict(new_state_dict, strict=False)
             model = model.to(device)
             epoch = checkpoint['epoch']
             try:
@@ -34,7 +34,7 @@ def auto_load_resume(model, optimizer, scheduler, path, status, device):
         for k, v in checkpoint['model_state_dict'].items():
             name = k[7:] if k.startswith('module.') else k
             new_state_dict[name] = v
-        model.load_state_dict(new_state_dict)
+        model.load_state_dict(new_state_dict, strict=False)
         epoch = checkpoint['epoch']
         print('Resume from %s' % 'epoch' + str(epoch))
         return epoch
