@@ -78,7 +78,7 @@ def main():
     seed_everything(seed)
     
     dataset_path_vt = os.path.join(root, "vt_data", "10KDataVT2014-2022")
-    end_epoch = 30 # Increased to train longer after plateau
+    end_epoch = 100 # Increased to train longer after plateau
     # Read the dataset
     trainloader, valloader, testloader = read_dataset(input_size, batch_size, root, dataset_path_vt)
 
