@@ -125,7 +125,7 @@ def main():
         start_epoch, best_val_acc = auto_load_resume(model, optimizer, scheduler, save_path, status='train', device=device)
         
         # User requested to change learning rate due to plateau
-        new_lr = 0.0003
+        new_lr = 0.00003
         print(f"Lowering learning rate to {new_lr} to handle plateau...")
         
         # Fix: Maintain the 10x differential learning rate ratio between backbone and head
