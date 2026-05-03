@@ -11,8 +11,8 @@ import shutil
 import time
 from utils.set_seeds import seed_everything
 from utils.read_dataset_vt import read_dataset
-from utils.train_model import train
-from config import seed, batch_size, root, checkpoint_path, init_lr, resume_lr, backbone_lr_factor, lr_decay_rate,\
+from utils.transform_train_model import train
+from config import seed, batch_size, root, checkpoint_path, init_lr, lr_decay_rate,\
     lr_milestones, weight_decay, end_epoch, dataset_path, input_size
 from utils.auto_load_resume import auto_load_resume
 import os
@@ -20,7 +20,7 @@ import argparse
 import wandb
 from pytorch_metric_learning import losses, miners
 
-from models.dewi import dewi_resnet50, dewi_resnet101, dewi_resnet152, dewi_resnext50_32x4d, dewi_resnext101_32x8d, dewi_resnext101_64x4d,\
+from models.transform_dewi import dewi_resnet50, dewi_resnet101, dewi_resnet152, dewi_resnext50_32x4d, dewi_resnext101_32x8d, dewi_resnext101_64x4d,\
     dewi_wide_resnet50_2, dewi_wide_resnet101_2
 
 class CosineClassifier(nn.Module):
@@ -107,13 +107,15 @@ def main():
     miner = miners.BatchHardMiner()
     
     # Differential learning rates:
-    # Separate the FC layer parameters from the rest of the model (the backbone)
+    # Separate the FC layer parameters and neck parameters from the rest of the model (the backbone)
     fc_params = list(map(id, model.fc.parameters()))
-    base_params = filter(lambda p: id(p) not in fc_params, model.parameters())
+    neck_params = list(map(id, model.neck.parameters()))
+    base_params = filter(lambda p: id(p) not in fc_params and id(p) not in neck_params, model.parameters())
 
     # define the optimizer with differential learning rates
     optimizer = torch.optim.SGD([
-        {'params': base_params, 'lr': init_lr * backbone_lr_factor},  # Backbone gets a smaller LR
+        {'params': base_params, 'lr': init_lr * 0.1},  # Backbone gets a 10x smaller LR
+        {'params': model.neck.parameters(), 'lr': init_lr * 0.1},  # Neck gets same as backbone initially
         {'params': model.fc.parameters(), 'lr': init_lr} # New classification head gets standard LR
     ], momentum=0.9, weight_decay=weight_decay)
     # define the learning rate scheduler
@@ -124,9 +126,14 @@ def main():
     if os.path.exists(save_path):
         start_epoch, best_val_acc = auto_load_resume(model, optimizer, scheduler, save_path, status='train', device=device)
         
-        print(f"Applying configured resume LR {resume_lr} from config.py")
-        optimizer.param_groups[0]['lr'] = resume_lr * backbone_lr_factor  # Backbone
-        optimizer.param_groups[1]['lr'] = resume_lr                        # Classification Head
+        # User requested to change learning rate due to plateau
+        new_lr = 0.00003
+        print(f"Lowering learning rate to {new_lr} to handle plateau...")
+        
+        # Fix: Maintain the 10x differential learning rate ratio between backbone/neck and head
+        optimizer.param_groups[0]['lr'] = new_lr * 0.1  # Backbone
+        optimizer.param_groups[1]['lr'] = new_lr * 0.1  # Neck
+        optimizer.param_groups[2]['lr'] = new_lr        # Classification Head
         
         # Reset optimizer state (momentum buffers) to prevent immediate divergence
         optimizer.state.clear()
@@ -154,7 +161,7 @@ def main():
         "end_epoch": end_epoch
     })
 
-     # Train the model
+    # Train the model
     train(model=model,
           device=device,
           trainloader=trainloader,
@@ -168,7 +175,8 @@ def main():
           save_path=save_path,
           start_epoch=start_epoch,
           end_epoch=end_epoch,
-          best_val_acc = best_val_acc)
+          best_val_acc = best_val_acc,
+          freeze_backbone_iters=2500)
 
 
 if __name__ == '__main__':

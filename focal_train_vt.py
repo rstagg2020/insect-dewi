@@ -6,13 +6,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
-from torch.optim.lr_scheduler import MultiStepLR
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 import shutil
 import time
+from collections import OrderedDict
 from utils.set_seeds import seed_everything
-from utils.read_dataset_vt import read_dataset
-from utils.train_model import train
-from config import seed, batch_size, root, checkpoint_path, init_lr, resume_lr, backbone_lr_factor, lr_decay_rate,\
+from utils.focal_read_dataset_vt import read_dataset
+from utils.focal_train_model import train
+from focal_config import seed, batch_size, root, checkpoint_path, init_lr, resume_lr, backbone_lr_factor, lr_decay_rate,\
     lr_milestones, weight_decay, end_epoch, dataset_path, input_size
 from utils.auto_load_resume import auto_load_resume
 import os
@@ -38,7 +39,26 @@ class CosineClassifier(nn.Module):
         x = F.normalize(x, p=2, dim=1)
         w = F.normalize(self.weight, p=2, dim=1)
         # Cosine similarity scaled by a constant factor
-        return F.linear(x, w) * self.scale
+        logits = F.linear(x, w) * self.scale
+        return logits
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=1, gamma=2, reduction='mean'):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+
+    def forward(self, inputs, targets):
+        ce_loss = F.cross_entropy(inputs, targets, reduction='none')
+        pt = torch.exp(-ce_loss)
+        focal_loss = self.alpha * (1 - pt) ** self.gamma * ce_loss
+        
+        if self.reduction == 'mean':
+            return focal_loss.mean()
+        elif self.reduction == 'sum':
+            return focal_loss.sum()
+        else:
+            return focal_loss
 
 
 device = torch.device("cuda")
@@ -78,9 +98,11 @@ def main():
     seed_everything(seed)
     
     dataset_path_vt = os.path.join(root, "vt_data", "100KDataVT2014-2022")
-    end_epoch = 100 # Increased to train longer after plateau
+    end_epoch = int(os.environ.get('FOCAL_END_EPOCH', 200))
+    _batch_size = int(os.environ.get('FOCAL_BATCH_SIZE', batch_size))
+    _num_workers = int(os.environ.get('FOCAL_NUM_WORKERS', 6))
     # Read the dataset
-    trainloader, valloader, testloader = read_dataset(input_size, batch_size, root, dataset_path_vt)
+    trainloader, valloader, testloader = read_dataset(input_size, _batch_size, root, dataset_path_vt, num_workers=_num_workers)
 
     # Initialize the model (it defaults to 102 classes in dewi.py)
     model = model_pool.get(args["model"])(pth_url=pretrained_url_pool.get(args["model"]), pretrained=True)
@@ -90,18 +112,21 @@ def main():
     # Replace the FC layer with a new one matching out classes (Logit Normalization)
     model.fc = CosineClassifier(in_features, num_classes, init_scale=20.0)
     
-    # load pretrained IP102 checkpoint if it exists so we are fine-tuning from IP102.
-    pretrained_ip102_path = os.path.join(checkpoint_path, args["model"], "best_model.pth")
-    if os.path.exists(pretrained_ip102_path):
-        print(f"Loading IP102 pre-trained weights from {pretrained_ip102_path}")
-        checkpoint = torch.load(pretrained_ip102_path, map_location='cpu')
+    # load pretrained checkpoint from earlier run (only used when no current_model.pth exists)
+    pretrained_path = os.path.join(checkpoint_path, args["model"] + "_vt", "focal_best_model.pth")
+    if os.path.exists(pretrained_path):
+        print(f"Loading pre-trained weights from {pretrained_path}")
+        checkpoint = torch.load(pretrained_path, map_location='cpu')
         state_dict = checkpoint['model_state_dict']
-        # remove the old fc weights
-        state_dict = {k: v for k, v in state_dict.items() if 'fc.' not in k}
-        model.load_state_dict(state_dict, strict=False)
+        new_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            name = k[7:] if k.startswith('module.') else k
+            if 'fc.' not in name:
+                new_state_dict[name] = v
+        model.load_state_dict(new_state_dict, strict=False)
 
-    # define the CE loss function
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+    # define the focal loss function
+    criterion = FocalLoss(alpha=1, gamma=2)
 
     metric_loss = losses.TripletMarginLoss(0.2)
     miner = miners.BatchHardMiner()
@@ -117,19 +142,12 @@ def main():
         {'params': model.fc.parameters(), 'lr': init_lr} # New classification head gets standard LR
     ], momentum=0.9, weight_decay=weight_decay)
     # define the learning rate scheduler
-    scheduler = MultiStepLR(optimizer, milestones=lr_milestones, gamma=lr_decay_rate)
+    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=20, T_mult=2)
 
     # loading checkpoint
     save_path = os.path.join(checkpoint_path, args["model"] + "_vt")
-    if os.path.exists(save_path):
+    if os.path.exists(save_path) and os.path.exists(os.path.join(save_path, 'current_model.pth')):
         start_epoch, best_val_acc = auto_load_resume(model, optimizer, scheduler, save_path, status='train', device=device)
-        
-        print(f"Applying configured resume LR {resume_lr} from config.py")
-        optimizer.param_groups[0]['lr'] = resume_lr * backbone_lr_factor  # Backbone
-        optimizer.param_groups[1]['lr'] = resume_lr                        # Classification Head
-        
-        # Reset optimizer state (momentum buffers) to prevent immediate divergence
-        optimizer.state.clear()
 
         assert start_epoch < end_epoch
     else:
@@ -144,7 +162,7 @@ def main():
     
 
     time_str = time.strftime("%Y%m%d-%H%M%S")
-    shutil.copy('./config.py', os.path.join(save_path, "{}config.py".format(time_str)))
+    shutil.copy('./focal_config.py', os.path.join(save_path, "{}config.py".format(time_str)))
     
     # Initialize wandb
     wandb.init(project="dewi-insect-classification", name="vt-100k-finetuning", config={

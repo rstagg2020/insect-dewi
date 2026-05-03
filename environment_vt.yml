@@ -1,0 +1,18 @@
+name: insect-dewi
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy
+  - pillow
+  - tqdm
+  - pip
+  - pip:
+    - torch>=2.6
+    - torchvision
+    - pytorch-metric-learning
+    - wandb
+    - imageio

@@ -12,7 +12,12 @@ def auto_load_resume(model, optimizer, scheduler, path, status, device):
         else:
             print('Loading pretrained model!')
             checkpoint = torch.load(current_model_path, map_location=device)
-            best_model = torch.load(best_model_path, map_location=device)
+            if os.path.exists(best_model_path):
+                best_model = torch.load(best_model_path, map_location=device)
+                best_val_acc = best_model['val_acc']
+            else:
+                print('Warning: best_model.pth not found, using val_acc from current checkpoint.')
+                best_val_acc = checkpoint.get('val_acc', 0.0)
             new_state_dict = OrderedDict()
             for k, v in checkpoint['model_state_dict'].items():
                 name = k[7:] if k.startswith('module.') else k
@@ -26,7 +31,7 @@ def auto_load_resume(model, optimizer, scheduler, path, status, device):
             except ValueError as e:
                 print(f"Warning: Could not load optimizer/scheduler state dicts ({e}). Starting fresh optimizer state.")
             print('Resume from %s' % 'epoch' + str(epoch))
-            return epoch, best_model['val_acc']
+            return epoch, best_val_acc
     elif status == 'test':
         print('Loading pretrained model!')
         checkpoint = torch.load(path, map_location='cpu')

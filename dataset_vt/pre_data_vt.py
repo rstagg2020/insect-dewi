@@ -45,6 +45,7 @@ class Dataset():
                 img = img[:,:,:3]
             img = Image.fromarray(img, mode='RGB')
             img = transforms.Resize(self.input_size + 16)(img)
+            img = transforms.RandAugment(num_ops=2, magnitude=9)(img)
             img = transforms.RandomRotation(20)(img)
             img = transforms.RandomVerticalFlip()(img)
             img = transforms.RandomCrop(self.input_size)(img)
