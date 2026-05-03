@@ -9,6 +9,9 @@ import math
 from torch.optim.lr_scheduler import MultiStepLR
 import shutil
 import time
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.set_seeds import seed_everything
 from utils.read_dataset_vt import read_dataset
 from utils.train_model import train
@@ -144,7 +147,8 @@ def main():
     
 
     time_str = time.strftime("%Y%m%d-%H%M%S")
-    shutil.copy('./config.py', os.path.join(save_path, "{}config.py".format(time_str)))
+    config_src = os.path.join(os.path.dirname(__file__), 'config.py')
+    shutil.copy(config_src, os.path.join(save_path, "{}config.py".format(time_str)))
     
     # Initialize wandb
     wandb.init(project="dewi-insect-classification", name="vt-100k-finetuning", config={

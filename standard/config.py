@@ -11,5 +11,5 @@ weight_decay = 1e-4
 input_size = 384
 
 root = '/netfiles/dmlabshare1/rstagg/insect-dewi'
-checkpoint_path = '/netfiles/dmlabshare1/rstagg/insect-dewi/checkpoint/'
+checkpoint_path = '/netfiles/dmlabshare1/rstagg/insect-dewi/standard/checkpoint/'
 dataset_path = '/netfiles/dmlabshare1/rstagg/insect-dewi/vt_data/100KDataVT2014-2022'

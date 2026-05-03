@@ -6,5 +6,5 @@ weight_decay = 5e-5    # used for backbone + head; neck uses 1e-2 (set in train 
 input_size = 384
 
 root = '/netfiles/dmlabshare1/rstagg/insect-dewi'
-checkpoint_path = '/netfiles/dmlabshare1/rstagg/insect-dewi/foc_tran_checkpoint/'
+checkpoint_path = '/netfiles/dmlabshare1/rstagg/insect-dewi/foc_tran/foc_tran_checkpoint/'
 dataset_path = '/netfiles/dmlabshare1/rstagg/insect-dewi/vt_data/100KDataVT2014-2022'

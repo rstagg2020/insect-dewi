@@ -12,7 +12,8 @@ dataset_10k/
 *.pth
 my_folders.zip
 wandb/
-foc_tran_checkpoint/
-focal_checkpoint/
-linear_checkpoint/
+foc_tran/foc_tran_checkpoint/
+focal/focal_checkpoint/
+linear/linear_checkpoint/
+standard/checkpoint/
 SLURM/
