@@ -7,7 +7,6 @@ Four training pipelines developed for the `dewi_resnet50` insect classification 
 Based on the work of Nguyen, Toan & Nguyễn, Huy & Ung, Huy & Ung, Hieu & Nguyen, Binh. (2024). Deep-Wide Learning Assistance for Insect Pest Classification. 10.48550/arXiv.2409.10445.
 
 ---
-https://api.wandb.ai/links/rstagg-university-of-vermont/ekk03i0q
 
 ## Shared Foundation: The DeWi Architecture (`models/dewi.py`)
 
