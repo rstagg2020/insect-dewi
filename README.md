@@ -1,5 +1,7 @@
 # Insect-Dewi: Model Architecture & Training History
 
+(Coral Salort and Ryan Stagg for CS6541)
+
 Four training pipelines developed for the `dewi_resnet50` insect classification model. The dataset is a Vermont geo-located, insect-focused subset of the iNaturalist dataset. All pipelines share the same ResNet50 backbone and the same DeWi dual-projector architecture. What differentiates them is the classification head, loss function, optimizer, and training strategy.
 
 Based on the work of Nguyen, Toan & Nguyễn, Huy & Ung, Huy & Ung, Hieu & Nguyen, Binh. (2024). Deep-Wide Learning Assistance for Insect Pest Classification. 10.48550/arXiv.2409.10445.
