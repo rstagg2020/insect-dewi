@@ -41,6 +41,30 @@ After the backbone, instead of using the 2048-dimensional feature vector directl
 **Combined Embedding:**
 The two 4096-dim vectors are concatenated: `p = cat(p1, p2)` → **8192-dimensional** combined embedding. A `Dropout(p=0.4)` is applied to this combined vector before passing it to the final classification head.
 
+```mermaid
+graph TD
+    Input["Input Image<br/>[B, 3, 384, 384]"] --> Conv1["Conv1 + MaxPool<br/>[B, 64, 96, 96]"]
+    Conv1 --> L1["Layer 1<br/>[B, 256, 96, 96]"]
+    L1 --> L2["Layer 2<br/>[B, 512, 48, 48]"]
+    L2 --> L3["Layer 3<br/>[B, 1024, 24, 24]"]
+    
+    L3 --> Proj1_Conv["Conv2d(stride=2)<br/>[B, 2048, 12, 12]"]
+    Proj1_Conv --> Proj1_Pool["AdaptiveAvgPool<br/>[B, 2048]"]
+    Proj1_Pool --> Proj1_FC["FC → BN → ReLU → FC<br/>[B, 4096]"]
+    Proj1_FC --> P1["Projector 1 Output<br/>[B, 4096]"]
+    
+    L3 --> L4["Layer 4<br/>[B, 2048, 12, 12]"]
+    
+    L4 --> Proj2_Pool["AdaptiveAvgPool<br/>[B, 2048]"]
+    Proj2_Pool --> Proj2_FC["FC → BN → ReLU → FC<br/>[B, 4096]"]
+    Proj2_FC --> P2["Projector 2 Output<br/>[B, 4096]"]
+    
+    P1 --> Concat{"Concatenate"}
+    P2 --> Concat
+    Concat --> Emb["Combined Embedding 'p'<br/>[B, 8192]"]
+    Emb --> Drop["Dropout(0.4)<br/>[B, 8192]"]
+```
+
 ### 3. Data Pipeline (`dataset_vt/pre_data_vt.py`)
 
 Images are loaded from disk using `imageio` and preprocessed via the following transforms:
@@ -94,6 +118,18 @@ logits = F.linear(x, w) * self.scale     # Dot product == cosine similarity; mul
 
 Because both `x` and `w` are forced onto the unit hypersphere before the dot product, the maximum possible logit value is bounded by `s`. The scale `s` starts at 20.0 and is a `nn.Parameter`, so the network can learn to increase or decrease the sharpness of the softmax distribution over time. This mathematically prevents the logit explosion that destroyed the original run.
 
+```mermaid
+graph TD
+    Drop["Dropout Embedding<br/>[B, 8192]"] --> NormX["L2 Normalize Feature (x)<br/>[B, 8192]"]
+    Weight["Class Weights<br/>[num_classes, 8192]"] --> NormW["L2 Normalize Weights (w)<br/>[num_classes, 8192]"]
+    NormX --> Dot{"Dot Product<br/>(Cosine Sim)"}
+    NormW --> Dot
+    Dot --> Scale["Multiply by Scale 's'<br/>(Initial: 20.0)"]
+    Scale --> Logits["Logits<br/>[B, num_classes]"]
+    Logits --> CE["Smoothed Cross Entropy Loss"]
+    Drop --> Trip["Triplet Margin Loss"]
+```
+
 ### Loss Functions
 - **Primary:** `nn.CrossEntropyLoss(label_smoothing=0.1)`. Label smoothing replaces the hard target (probability 1.0 for the correct class, 0.0 for all others) with a soft distribution (0.9 for the correct class, `0.1 / (num_classes - 1)` for all others). This removes the mathematical asymptote that had been encouraging the linear head to drive logit magnitudes toward infinity.
 - **Auxiliary:** `TripletMarginLoss(margin=0.2)` with `BatchHardMiner`.
@@ -122,6 +158,14 @@ nn.init.kaiming_normal_(model.fc.weight, mode='fan_out', nonlinearity='relu')
 nn.init.constant_(model.fc.bias, 0)
 ```
 The head maps the 8192-dimensional combined DeWi embedding to `num_classes` logits using unconstrained dot products. The weights are Kaiming-initialized.
+
+```mermaid
+graph TD
+    Drop["Dropout Embedding<br/>[B, 8192]"] --> Linear["nn.Linear<br/>Weights: [num_classes, 8192]"]
+    Linear --> Logits["Logits<br/>[B, num_classes]"]
+    Logits --> Focal["Focal Loss<br/>(alpha=1, gamma=2)"]
+    Drop --> Trip["Triplet Margin Loss"]
+```
 
 ### Loss Functions
 
@@ -156,6 +200,14 @@ The most sophisticated of the active pipelines. Combines the class-imbalance han
 
 ### Classification Head: `CosineClassifier`
 Same architecture as in the Standard pipeline: L2-normalized features, L2-normalized weight vectors, and a learnable scale parameter `s`. The key difference is that this head is combined with Focal Loss instead of label-smoothed CE.
+
+```mermaid
+graph TD
+    Drop["Dropout Embedding<br/>[B, 8192]"] --> CosineHead["CosineClassifier<br/>(L2 Norm + Scaled Dot Product)"]
+    CosineHead --> Logits["Scaled Cosine Logits<br/>[B, num_classes]"]
+    Logits --> Focal["Focal Loss<br/>(alpha=1, gamma=2)"]
+    Drop --> Trip["Triplet Margin Loss"]
+```
 
 ### Loss Functions
 
@@ -205,6 +257,18 @@ After `Layer4` produces a `[B, 2048, 12, 12]` spatial feature map, the Transform
 4. **Spatial residual:** The transformer output is reshaped back to `[B, 2048, 12, 12]` and **added** to the original feature map (`x = x + x_spatial`) as a residual connection. This prevents the transformer from catastrophically overwriting the backbone features.
 5. **Pooling and projection:** The output continues through `avgpool → flatten → projector2`, producing the 4096-dim high-level features that combine with the mid-level features from `projector1`.
 
+```mermaid
+graph TD
+    L4["Layer 4 Features<br/>[B, 2048, 12, 12]"] --> Flatten["Flatten & Permute<br/>[B, 144, 2048]"]
+    Flatten --> PosEmb["Add Positional Embedding"]
+    PosEmb --> Attn["TransformerEncoder<br/>(8 heads)"]
+    Attn --> Reshape["Reshape<br/>[B, 2048, 12, 12]"]
+    L4 --> Res{"Residual Add<br/>x = x + x_spatial"}
+    Reshape --> Res
+    Res --> Proj2["Projector 2<br/>(Pooling → FCs)"]
+    Proj2 --> P2["High-Level Features<br/>[B, 4096]"]
+```
+
 ### Loss Functions
 Same as the Focal pipeline: `FocalLoss(alpha=1, gamma=2)` + `TripletMarginLoss(margin=0.2)` with `BatchHardMiner`. CosineClassifier head.
 
@@ -220,3 +284,67 @@ Same as the Focal pipeline: `FocalLoss(alpha=1, gamma=2)` + `TripletMarginLoss(m
 - **Plateau:** ~51.9% Validation Accuracy, ~46.1% Test Accuracy.
 - **Root Cause:** The randomly initialized Transformer Neck received a 30× higher learning rate than the backbone. Without a **linear warmup phase**, the neck made enormous gradient updates in the first few epochs. These large gradients flowed backward directly into the pre-trained backbone via the residual connection, corrupting the ImageNet feature representations before the neck could learn anything coherent.
 - **Status: Discontinued.** Stabilizing this pipeline would require either (a) a linear LR warmup for the neck, (b) completely freezing the backbone for the first N epochs, or (c) initializing the neck from a partially-trained checkpoint instead of random weights. None of these were pursued, as the pipeline significantly increases parameter count and memory overhead without demonstrating immediate gains over the simpler approaches.
+
+---
+
+## Pipeline 5: CosFace + TTA (`cosface_tta/cosface_tta_train_vt.py`)
+
+### Purpose
+The ultimate culmination of the project's optimization efforts, designed to break the ~87% accuracy ceiling established by the `Focal + Cosine` pipeline. It introduces a strict angular margin to forcefully separate class embeddings, and implements multi-view inference to squeeze out "free" accuracy gains without modifying the backbone.
+
+### Classification Head: `CosFaceClassifier` (Angular Margin)
+The `CosineClassifier` was completely refactored into a `CosFaceClassifier` that mathematically enforces a minimum angular margin between the true class and all negative classes.
+
+```python
+cosine = F.linear(F.normalize(x, p=2, dim=1), F.normalize(self.weight, p=2, dim=1))
+# If training, subtract margin m from the ground-truth logit
+phi = cosine - self.m 
+one_hot = torch.zeros_like(cosine).scatter_(1, labels.view(-1, 1).long(), 1)
+logits = (one_hot * phi) + ((1.0 - one_hot) * cosine)
+logits = logits * self.s
+```
+- **Scale (`s=30.0`):** Fixed empirically rather than learned. Controls the radius of the hypersphere.
+- **Margin (`m=0.35`):** The ground-truth cosine similarity is artificially reduced by `0.35` during training. This forces the model to not just classify the image correctly, but to push the embedding deep into its correct sector on the hypersphere, maximizing inter-class variance.
+
+### Test-Time Augmentation (TTA) (`cosface_tta_eval.py`)
+To maximize the predictive power of the model, the standard single-image evaluation loop was rewritten. During validation and testing, every image is evaluated twice:
+1. The original `384x384` CenterCrop.
+2. A horizontally flipped version (`torch.flip(images, dims=[3])`).
+
+The model produces embeddings for both views. The embeddings (and resulting logits) are averaged before the final `argmax` prediction is made:
+```python
+p_orig, emb_orig = model(images)
+p_flip, emb_flip = model(torch.flip(images, dims=[3]))
+logits = (classifier(emb_orig) + classifier(emb_flip)) / 2.0
+```
+This multi-crop consensus makes the model significantly more robust to pose variations and morphological asymmetries.
+
+```mermaid
+graph TD
+    OrigImg["Image<br/>[B, 3, 384, 384]"] --> ModelOrig["DeWi Backbone"]
+    FlipImg["Flipped Image<br/>[B, 3, 384, 384]"] --> ModelFlip["DeWi Backbone"]
+    
+    ModelOrig --> EmbOrig["Embedding<br/>[B, 8192]"]
+    ModelFlip --> EmbFlip["Embedding<br/>[B, 8192]"]
+    
+    EmbOrig --> CosHeadOrig["CosFaceClassifier<br/>(Cosine Sim)"]
+    EmbFlip --> CosHeadFlip["CosFaceClassifier<br/>(Cosine Sim)"]
+    
+    CosHeadOrig --> LogitsOrig["Logits Orig<br/>[B, num_classes]"]
+    CosHeadFlip --> LogitsFlip["Logits Flip<br/>[B, num_classes]"]
+    
+    LogitsOrig --> Avg{"Average Logits"}
+    LogitsFlip --> Avg
+    Avg --> Final["Final Prediction"]
+    
+    LogitsOrig -.-> Train["Training Only:<br/>Subtract Margin (m=0.35)<br/>from True Class"]
+```
+
+### Optimizer, Scheduler & Resume Logic
+- **Resume Strategy:** Instead of starting from scratch, this pipeline actively loads the 87% accurate `focal_best_model.pth`. The generic `model.fc` weights are intelligently mapped into the standalone `CosFaceClassifier`.
+- **Optimizer:** SGD (`momentum=0.9`, `weight_decay=1e-4`). The backbone uses differential learning rates (`init_lr * 0.1`) while the new CosFace head trains at full `init_lr` to adjust to the new margin constraint.
+- **Scheduler:** `CosineAnnealingWarmRestarts(T_0=20, T_mult=2)`.
+
+### Training History & Current Status
+- **Status: Active.** Currently running on `r6node01` as SLURM Job `4091086`.
+- **Performance Expectation:** Initially, the CE loss will spike slightly as the model adjusts to the strict `m=0.35` penalty. Once the embeddings migrate to their tighter clusters, the combination of CosFace and TTA is expected to push accuracy past the 90-95% threshold.
