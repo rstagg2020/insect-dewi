@@ -8,11 +8,11 @@ Based on the work of Nguyen, Toan & Nguyễn, Huy & Ung, Huy & Ung, Hieu & Nguye
 
 ## Shared Foundation: The DeWi Architecture (`models/dewi.py`)
 
-All four pipelines are built on top of the custom **DeWi** ("Deep-Wide") class. This is not a plain ResNet50. It is a heavily modified ResNet50 with a dual-stream projection network attached.
+All four pipelines are built on top of the custom **DeWi** ("Deep-Wide") class; a heavily modified ResNet50 with a dual-stream projection network attached.
 
 ### 1. Convolutional Backbone (ResNet50)
 
-The backbone is a standard ResNet50 with Bottleneck residual blocks arranged as `[3, 4, 6, 3]` blocks across four stages (Layer1–Layer4). The input is a 3-channel RGB image at **384×384 pixels**. The initial `conv1` applies a 7×7 convolution with stride 2, immediately followed by Batch Normalization and ReLU, and then a 3×3 MaxPool with stride 2. This reduces the spatial dimensions to 96×96 before passing through the four residual stages.
+The backbone is a standard ResNet50 with Bottleneck residual blocks arranged as `[3, 4, 6, 3]` blocks across four stages (Layer1–Layer4). The input is a 3-channel RGB image at **384×384 pixels**. The initial `conv1` applies a 7×7 convolution with stride 2, followed by Batch Normalization and ReLU, and then a 3×3 MaxPool with stride 2. This reduces the spatial dimensions to 96×96 before passing through the four residual stages.
 
 | Stage | Output Channels | Spatial Size (at 384px input) | Blocks |
 |-------|----------------|-------------------------------|--------|
@@ -26,7 +26,7 @@ All convolutional weights are initialized with **Kaiming Normal** initialization
 
 ### 2. Dual-Stream Projector (The "Wide" Part)
 
-After the backbone, instead of using the 2048-dimensional feature vector directly, the model branches into **two parallel projection heads** (`projector1` and `projector2`) that produce a much richer combined embedding. This is the distinguishing "Wide" feature of DeWi.
+After the backbone, the model branches into **two parallel projection heads** (`projector1` and `projector2`) that produce a richer combined embedding. This is the "Wide" feature of DeWi.
 
 **Projector 1 (Mid-level features, `projector1`):**
 - Taps into the output of `Layer3` (1024 channels, 24×24 spatial map).
@@ -73,7 +73,7 @@ Images are loaded from disk using `imageio` and preprocessed via the following t
 
 **Training:**
 1. `Resize(input_size + 16)` — oversizes the image slightly for crop headroom.
-2. `RandAugment(num_ops=2, magnitude=9)` — applies 2 randomly-chosen policy operations (e.g., shear, solarize, rotate) at magnitude 9 out of 30. Added in the most recent training iteration to improve generalization.
+2. `RandAugment(num_ops=2, magnitude=9)` — applies 2 randomly-chosen policy operations (e.g., shear, solarize, rotate) at magnitude 9 out of 30.
 3. `RandomRotation(20)` — rotates ±20 degrees.
 4. `RandomVerticalFlip()` — 50% chance of vertical flip.
 5. `RandomCrop(input_size)` — crops to the final 384×384 size.
@@ -103,11 +103,9 @@ After each epoch, both `current_model.pth` (always overwritten) and `best_model.
 
 ---
 
-## Pipeline 1: Standard (`standard/train_vt.py`)
+## Pipeline 1: Standard w/ Cosine Head
 
-### Purpose
-The original research baseline. This pipeline was designed specifically to solve a **Logit Norm Explosion** bug discovered in the earliest training runs, where the unconstrained linear classification head collapsed under the pressure of Triplet metric learning.
-
+### Purpos
 ### Classification Head: `CosineClassifier`
 The standard `nn.Linear` head was replaced with a custom class that constrains the geometry of the output space:
 
@@ -148,7 +146,7 @@ graph TD
 
 ---
 
-## Pipeline 2: Linear + Focal (`linear/linear_train_vt.py`)
+## Pipeline 2: Linear + Focal
 
 ### Purpose
 A deliberate simplification of the Standard pipeline. The `CosineClassifier` is removed and replaced with a plain `nn.Linear` head, but the Cross Entropy loss is replaced with **Focal Loss** to handle class imbalance more aggressively.
@@ -190,18 +188,18 @@ With `gamma=2` and `alpha=1`, examples that are classified with high confidence 
 ### Training History & Plateau
 - **Reached:** Epoch 70+.
 - **Plateau:** ~84.0% Validation Accuracy, ~77.6% Test Accuracy.
-- **Root Cause:** The `MultiStepLR` had decayed the learning rate to `0.003 * 0.2^5 ≈ 9.6e-6` for the backbone, making weight updates far too small to escape the local minimum.
+- **Root Cause:** The `MultiStepLR` had decayed the learning rate to `0.003 * 0.2^5 ≈ 9.6e-6` for the backbone, making weight updates too small to escape the local minimum.
 - **Fix Applied:** Swapped to `CosineAnnealingWarmRestarts` and added `RandAugment` to the data pipeline.
 
 ---
 
-## Pipeline 3: Focal + Cosine (`focal/focal_train_vt.py`)
+## Pipeline 3: Focal + Cosine
 
 ### Purpose
 The most sophisticated of the active pipelines. Combines the class-imbalance handling of Focal Loss with the geometric stability of the `CosineClassifier` hypersphere head.
 
 ### Classification Head: `CosineClassifier`
-Same architecture as in the Standard pipeline: L2-normalized features, L2-normalized weight vectors, and a learnable scale parameter `s`. The key difference is that this head is combined with Focal Loss instead of label-smoothed CE.
+Same architecture as in the Standard pipeline: L2-normalized features, L2-normalized weight vectors, and a learnable scale parameter `s`. The difference is that this head is combined with Focal Loss instead of label-smoothed CE.
 
 ```mermaid
 graph TD
@@ -231,7 +229,7 @@ graph TD
 
 ---
 
-## Pipeline 4: Focal + Transformer (`foc_tran/foc_tran_train_vt.py`)
+## Pipeline 4: Focal + Transformer
 
 ### Purpose
 An experimental pipeline that inserts a self-attention module between the convolutional backbone and the classification head to enable the model to capture global long-range dependencies across the feature map.
@@ -347,6 +345,5 @@ graph TD
 - **Optimizer:** SGD (`momentum=0.9`, `weight_decay=1e-4`). The backbone uses differential learning rates (`init_lr * 0.1`) while the new CosFace head trains at full `init_lr` to adjust to the new margin constraint.
 - **Scheduler:** `CosineAnnealingWarmRestarts(T_0=20, T_mult=2)`.
 
-### Training History & Current Status
-- **Status: Active.** Currently running on `r6node01` as SLURM Job `4091086`.
+### Training History
 - **Performance Expectation:** Initially, the CE loss will spike slightly as the model adjusts to the strict `m=0.35` penalty. Once the embeddings migrate to their tighter clusters, the combination of CosFace and TTA is expected to push accuracy past the 90-95% threshold.
