@@ -1,6 +1,7 @@
 # Insect-Dewi: Model Architecture & Training History
 
 (Coral Salort and Ryan Stagg for CS6540)
+
 https://api.wandb.ai/links/rstagg-university-of-vermont/27ge1vlk
 
 Four training pipelines developed for the `dewi_resnet50` insect classification model. The dataset is a Vermont geo-located, insect-focused subset of the iNaturalist dataset. All pipelines share the same ResNet50 backbone and the same DeWi dual-projector architecture. What differentiates them is the classification head, loss function, optimizer, and training strategy.
