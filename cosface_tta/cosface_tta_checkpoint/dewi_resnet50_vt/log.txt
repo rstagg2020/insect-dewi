@@ -1,0 +1,5 @@
+
+EPOCH1
+Validation set: Avg Val CE Loss: 1.6350; Avg Val Metric Loss: 0.1031; Val accuracy: 63.18% 
+Test set: Avg Test CE Loss: 2.2809; Avg Test Metric Loss: 0.0723; Test accuracy: 53.96%
+Saving best model!

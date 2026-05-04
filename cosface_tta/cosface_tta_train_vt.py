@@ -121,7 +121,7 @@ def main():
     classifier = CosFaceClassifier(in_features, num_classes, s=30.0, m=0.35).to(device)
     
     # load pretrained checkpoint from earlier run (best focal model)
-    pretrained_path = os.path.join(root, "focal/focal_checkpoint", args["model"] + "_vt", "focal_best_model.pth")
+    pretrained_path = os.path.join(root, "focal/focal_checkpoint", args["model"] + "_vt", "best_model.pth")
     if os.path.exists(pretrained_path):
         print(f"Loading pre-trained weights from {pretrained_path}")
         checkpoint = torch.load(pretrained_path, map_location='cpu')
