@@ -17,3 +17,4 @@ focal/focal_checkpoint/
 linear/linear_checkpoint/
 standard/checkpoint/
 SLURM/
+training_comparison_report_v2.md
