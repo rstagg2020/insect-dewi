@@ -13,7 +13,7 @@ This report contains **every recorded data point** for all strategies, sorted by
 
 ## Detailed Metrics (Full History)
 
-### Standard Strategy
+### Cosine classifier Strategy
 
 | Epoch | Val Acc | Test Acc | Val CE Loss | Val Metric Loss | Test CE Loss | Test Metric Loss |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -43,7 +43,7 @@ This report contains **every recorded data point** for all strategies, sorted by
 | 64 | 22.09% | 18.49% | 4.8113 | 0.3451 | 5.2915 | 0.3171 |
 | 65 | 22.59% | 19.20% | 4.7554 | 0.3357 | 5.2428 | 0.3009 |
 
-### Linear Strategy
+### Focal loss, Linear classifier Strategy
 
 | Epoch | Val Acc | Test Acc | Val CE Loss | Val Metric Loss | Test CE Loss | Test Metric Loss |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -135,7 +135,7 @@ This report contains **every recorded data point** for all strategies, sorted by
 | 95 | 83.32% | 77.80% | 0.5380 | 0.1042 | 0.8000 | 0.0714 |
 | 96 | 83.83% | 77.96% | 0.5301 | 0.1002 | 0.7965 | 0.0720 |
 
-### Focal Strategy
+### Focal loss, Cosine classifier Strategy
 
 | Epoch | Val Acc | Test Acc | Val CE Loss | Val Metric Loss | Test CE Loss | Test Metric Loss |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -340,7 +340,7 @@ This report contains **every recorded data point** for all strategies, sorted by
 | 199 | 86.91% | 82.41% | 0.3650 | 0.0657 | 0.5618 | 0.0444 |
 | 200 | 87.00% | 82.21% | 0.3687 | 0.0664 | 0.5767 | 0.0465 |
 
-### Focal+Transform Strategy
+### Focal loss, Transformer neck Strategy
 
 | Epoch | Val Acc | Test Acc | Val CE Loss | Val Metric Loss | Test CE Loss | Test Metric Loss |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
